@@ -21,11 +21,6 @@ giờ/giá, Nhân viên vận hành tại quầy.
   (`CUSTOMER` / `FIELD_OWNER` / `STAFF`)
 - **Mật khẩu:** bcrypt
 
-> Lưu ý: ban đầu đồ án dự kiến Node.js/Express/React, nhưng do máy phát triển
-> không có sẵn Node.js và theo yêu cầu của người dùng, toàn bộ hệ thống được
-> chuyển sang 100% Python (NiceGUI) để có thể cài đặt & chạy nhanh trong 1 tuần
-> mà vẫn giữ đúng kiến trúc 3 lớp (Presentation – Business Logic – Data Access)
-> và đầy đủ yêu cầu kỹ thuật (chống trùng lịch, state machine, JWT, validate).
 
 ## Cấu trúc thư mục
 
