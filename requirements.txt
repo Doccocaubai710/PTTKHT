@@ -1,0 +1,4 @@
+nicegui==3.14.0
+SQLAlchemy==2.0.51
+PyJWT==2.13.0
+bcrypt==5.0.0
