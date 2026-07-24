@@ -58,3 +58,20 @@ models ---> core.database  (Base declarative để khai báo bảng)
 | `sqlalchemy` | `core.database`, `models`, `repositories` | ORM, quản lý Session/transaction |
 | `pyjwt` | `core.security` | Tạo/giải mã JWT |
 | `bcrypt` | `core.security` | Băm mật khẩu |
+
+## Danh sách module trong từng package (ánh xạ 6 gói chức năng G1–G6)
+
+| Gói chức năng | `pages` | `services` | `repositories` | `models` |
+|---|---|---|---|---|
+| G1 | `auth_pages.py` | `auth_service.py` | `user_repository.py`, `password_reset_repository.py` | `user.py`, `password_reset.py` |
+| G2 | `customer_pages.py` | `booking_service.py`, `field_service.py` | `booking_repository.py`, `field_repository.py` | `booking.py`, `field.py` |
+| G3 | `owner_pages.py` | `facility_service.py`, `field_service.py`, `staff_service.py` | `facility_repository.py`, `field_repository.py`, `user_repository.py` | `facility.py`, `field.py`, `user.py` |
+| G4 | `staff_pages.py` | `booking_service.py` | `booking_repository.py`, `field_repository.py`, `user_repository.py` | `booking.py` |
+| G5 | `customer_pages.py`, `owner_pages.py` | `review_service.py` | `review_repository.py`, `field_repository.py`, `facility_repository.py` | `review.py` |
+| G6 | `admin_pages.py` | `admin_service.py`, `facility_service.py`, `complaint_service.py` | `user_repository.py`, `facility_repository.py`, `booking_repository.py`, `complaint_repository.py` | `complaint.py` |
+
+Ghi chú: nhiều gói chia sẻ cùng service/repository (VD `field_service.py` được dùng
+cả ở G2 và G3) — đây là hệ quả tự nhiên của việc gói chức năng (G1–G6) là một cách
+phân rã **theo nghiệp vụ/actor**, còn package (`pages`/`services`/`repositories`/
+`models`) là cách phân rã **theo lớp kiến trúc** — hai cách phân rã này cắt ngang
+nhau (orthogonal), không phải quan hệ 1-1.

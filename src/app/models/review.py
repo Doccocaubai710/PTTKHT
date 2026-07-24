@@ -20,6 +20,10 @@ class Review(Base):
     comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # UC23: Chủ sân phản hồi đánh giá của khách hàng.
+    owner_reply: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     booking = relationship("Booking", back_populates="review")
     field = relationship("Field", back_populates="reviews")
     customer = relationship("User", back_populates="reviews")

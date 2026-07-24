@@ -47,7 +47,9 @@ class Booking(Base):
             "booking_date",
             "time_slot_id",
             unique=True,
-            sqlite_where=text("status IN ('PENDING', 'CONFIRMED', 'COMPLETED')"),
+            sqlite_where=text(
+                "status IN ('PENDING', 'AWAITING_CONFIRMATION', 'CONFIRMED', 'COMPLETED')"
+            ),
         ),
     )
 
@@ -66,12 +68,19 @@ class Booking(Base):
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
     deposit_amount: Mapped[float] = mapped_column(Float, nullable=False)
     is_deposit_paid: Mapped[bool] = mapped_column(default=False)
-    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)  # MOCK_ONLINE / CASH
+    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)  # ONLINE_QR / CASH
+
+    # UC09: minh chứng chuyển khoản (mã giao dịch / mô tả) do khách hàng tải lên,
+    # được Nhân viên sân đối chiếu ở UC18.
+    payment_proof_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payment_rejected_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    confirmed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     hold_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancel_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     refund_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reschedule_count: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -82,4 +91,5 @@ class Booking(Base):
     time_slot = relationship("FieldTimeSlot", back_populates="bookings")
     customer = relationship("User", back_populates="bookings_made", foreign_keys=[customer_id])
     created_by = relationship("User", foreign_keys=[created_by_id])
+    confirmed_by = relationship("User", foreign_keys=[confirmed_by_id])
     review = relationship("Review", back_populates="booking", uselist=False)

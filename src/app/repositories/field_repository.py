@@ -2,7 +2,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.enums import SportType
+from app.models.enums import FacilityStatus, SportType
+from app.models.facility import Facility
 from app.models.field import Field, FieldTimeSlot
 
 
@@ -10,8 +11,16 @@ class FieldRepository:
     def get_by_id(self, session: Session, field_id: int) -> Field | None:
         return session.get(Field, field_id)
 
+    def list_by_facility(self, session: Session, facility_id: int) -> list[Field]:
+        stmt = select(Field).where(Field.facility_id == facility_id)
+        return list(session.execute(stmt).scalars().all())
+
     def list_by_owner(self, session: Session, owner_id: int) -> list[Field]:
-        stmt = select(Field).where(Field.owner_id == owner_id)
+        stmt = (
+            select(Field)
+            .join(Facility, Field.facility_id == Facility.id)
+            .where(Facility.owner_id == owner_id)
+        )
         return list(session.execute(stmt).scalars().all())
 
     def search(
@@ -19,10 +28,13 @@ class FieldRepository:
         session: Session,
         area: str | None = None,
         sport_type: SportType | None = None,
+        approved_only: bool = True,
     ) -> list[Field]:
-        stmt = select(Field)
+        stmt = select(Field).join(Facility, Field.facility_id == Facility.id)
+        if approved_only:
+            stmt = stmt.where(Facility.status == FacilityStatus.APPROVED)
         if area:
-            stmt = stmt.where(Field.area.ilike(f"%{area}%"))
+            stmt = stmt.where(Facility.area.ilike(f"%{area}%"))
         if sport_type:
             stmt = stmt.where(Field.sport_type == sport_type)
         return list(session.execute(stmt).scalars().all())

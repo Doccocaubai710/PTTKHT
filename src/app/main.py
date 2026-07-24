@@ -13,7 +13,7 @@ from app.pages.guards import get_current_user, home_path_for_role
 from app.services.booking_service import BookingService
 
 # Import các trang để NiceGUI đăng ký route (@ui.page) khi module được load.
-from app.pages import auth_pages, customer_pages, owner_pages, staff_pages  # noqa: F401
+from app.pages import admin_pages, auth_pages, customer_pages, owner_pages, staff_pages  # noqa: F401
 
 booking_service = BookingService()
 

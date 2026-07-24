@@ -57,6 +57,7 @@ def home_path_for_role(role: UserRole) -> str:
         UserRole.CUSTOMER: "/search",
         UserRole.FIELD_OWNER: "/owner",
         UserRole.STAFF: "/staff",
+        UserRole.ADMIN: "/admin",
     }[role]
 
 

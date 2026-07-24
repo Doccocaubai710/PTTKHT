@@ -1,20 +1,34 @@
-# Draft — Sequence Diagram cho UC006 (Quản lý khung giờ & giá sân)
+# Draft — Sequence Diagram cho UC14 (Quản lý sân và khung giờ)
 
-## Luồng chính A — Đăng ký sân mới
+## Luồng chính A — Thêm sân mới vào một Cơ sở sân đã có (UC13 là tiền đề)
 
 ```
-1. Chủ sân -> OwnerDashboardPage.new_field_dialog()
-2. OwnerDashboardPage --> Chủ sân: hiển thị form (Tên sân, Loại sân, Khu vực, Địa chỉ, Mô tả)
+1. Chủ sân -> OwnerDashboardPage.new_field_dialog(facility_id)
+2. OwnerDashboardPage --> Chủ sân: hiển thị form (Tên sân, Loại sân, Mô tả)
 3. Chủ sân -> OwnerDashboardPage.submit()
-4. OwnerDashboardPage -> FieldService.create_field(owner_id, name, sport_type, area, address, description)
-5. FieldService -> FieldService: validate name/area/address không rỗng
-6. FieldService -> FieldRepository.add(session, field mới)
-7. FieldRepository -> Database: INSERT INTO fields (...) VALUES (...)
-8. Database --> FieldRepository: field (đã có id)
-9. FieldRepository --> FieldService: field
-10. FieldService --> OwnerDashboardPage: field
-11. OwnerDashboardPage -> OwnerDashboardPage: refresh() (nạp lại danh sách sân)
-12. OwnerDashboardPage --> Chủ sân: thông báo "Đăng ký sân thành công."
+4. OwnerDashboardPage -> FieldService.create_field(owner_id, facility_id, name, sport_type, description)
+5. FieldService -> FacilityRepository.get_by_id(session, facility_id) : facility
+6. FieldService -> FieldService: kiểm tra facility.owner_id == owner_id -> hợp lệ
+7. FieldService -> FieldService: validate name không rỗng
+8. FieldService -> FieldRepository.add(session, field mới với facility_id)
+9. FieldRepository -> Database: INSERT INTO fields (...) VALUES (...)
+10. Database --> FieldRepository: field (đã có id)
+11. FieldRepository --> FieldService: field
+12. FieldService --> OwnerDashboardPage: field
+13. OwnerDashboardPage -> OwnerDashboardPage: refresh() (nạp lại danh sách sân)
+14. OwnerDashboardPage --> Chủ sân: thông báo "Đã thêm sân mới."
+```
+
+## Luồng ngoại lệ A0 — Cơ sở sân không thuộc quyền sở hữu của Chủ sân
+
+```
+1. Chủ sân -> OwnerDashboardPage.submit()   [facility_id không thuộc owner_id hiện tại]
+2. OwnerDashboardPage -> FieldService.create_field(owner_id, facility_id, ...)
+3. FieldService -> FacilityRepository.get_by_id(session, facility_id) : facility
+4. FieldService -> FieldService: kiểm tra facility.owner_id == owner_id -> THẤT BẠI
+5. FieldService -> FieldService: raise FieldError("Cơ sở sân không hợp lệ.")
+6. FieldService --> OwnerDashboardPage: FieldError
+7. OwnerDashboardPage --> Chủ sân: hiển thị thông báo lỗi, không có sân nào được tạo
 ```
 
 ## Luồng chính B — Thêm khung giờ mới cho một sân

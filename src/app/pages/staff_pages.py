@@ -1,12 +1,13 @@
-"""Presentation layer cho UC007 - Nhân viên đặt hộ khách walk-in tại quầy
-(bao gồm check-in và xác nhận thanh toán tiền mặt)."""
+"""Presentation layer cho UC18 (xác nhận thanh toán), UC19 (check-in khách),
+UC20 (đặt sân trực tiếp cho khách vãng lai) và UC21 (xử lý yêu cầu đổi/hủy tại chỗ).
+Toàn bộ trang được giới hạn theo Cơ sở sân (facility_id) mà nhân viên đang thuộc về."""
 from datetime import date
 
 from nicegui import ui
 
 from app.core.database import get_session
 from app.core.security import hash_password
-from app.models.enums import BookingStatus, SportType, UserRole
+from app.models.enums import BookingStatus, UserRole
 from app.models.user import User
 from app.pages.common import SPORT_TYPE_LABELS, STATUS_COLORS, STATUS_LABELS, header
 from app.pages.guards import require_role
@@ -19,6 +20,11 @@ booking_service = BookingService()
 user_repo = UserRepository()
 
 WALKIN_DEFAULT_PASSWORD = "walkin123"
+
+NAV_LINKS = [
+    ("Đặt hộ khách", "/staff"),
+    ("Đặt sân hôm nay", "/staff/today"),
+]
 
 
 def _get_or_create_customer(full_name: str, phone: str) -> int:
@@ -38,22 +44,29 @@ def _get_or_create_customer(full_name: str, phone: str) -> int:
         return new_user.id
 
 
+def _staff_facility_id(user) -> int | None:
+    with get_session() as session:
+        staff = user_repo.get_by_id(session, user.user_id)
+        return staff.facility_id if staff else None
+
+
 @ui.page("/staff")
 def staff_page():
     user = require_role(UserRole.STAFF)
     if not user:
         return
 
-    header(user, [("Đặt hộ khách", "/staff"), ("Đặt sân hôm nay", "/staff/today")])
+    facility_id = _staff_facility_id(user)
+    header(user, NAV_LINKS)
     ui.label("Đặt sân hộ khách walk-in").classes("text-2xl font-bold mt-4 mx-4")
 
+    if not facility_id:
+        ui.label(
+            "Tài khoản của bạn chưa được gán vào cơ sở sân nào. Vui lòng liên hệ Chủ sân."
+        ).classes("mx-4 text-red-600")
+        return
+
     with ui.row().classes("mx-4 gap-4"):
-        area_input = ui.input("Khu vực").classes("w-48")
-        sport_select = ui.select(
-            {"": "Tất cả loại sân", **{s.value: SPORT_TYPE_LABELS[s.value] for s in SportType}},
-            value="",
-            label="Loại sân",
-        ).classes("w-48")
         date_input = ui.date(value=date.today().isoformat()).classes("w-48")
 
     fields_container = ui.column().classes("mx-4 mt-4 w-full gap-2")
@@ -79,19 +92,22 @@ def staff_page():
                 customer_id=customer_id,
                 created_by_id=user.user_id,
             )
-            ui.notify(f"Đã tạo đặt sân #{booking.id} cho khách. Nhớ xác nhận thanh toán ở tab bên.", type="positive")
+            ui.notify(
+                f"Đã tạo đặt sân #{booking.id} cho khách. Nhớ xác nhận thanh toán ở tab bên.", type="positive"
+            )
             refresh_fields()
         except BookingError as e:
             ui.notify(str(e), type="negative")
 
     def refresh_fields():
         fields_container.clear()
-        sport_type = SportType(sport_select.value) if sport_select.value else None
-        fields = field_service.search_fields(area=area_input.value or None, sport_type=sport_type)
+        fields = field_service.list_facility_fields(facility_id)
         on_date = date.fromisoformat(date_input.value)
         with fields_container:
+            if not fields:
+                ui.label("Cơ sở của bạn chưa có sân nào.")
             for f in fields:
-                with ui.expansion(f"{f.name} - {f.area} ({SPORT_TYPE_LABELS[f.sport_type.value]})").classes("w-full"):
+                with ui.expansion(f"{f.name} ({SPORT_TYPE_LABELS[f.sport_type.value]})").classes("w-full"):
                     availability = field_service.get_availability(f.id, on_date)
                     for slot in availability:
                         with ui.row().classes("items-center gap-4"):
@@ -105,7 +121,8 @@ def staff_page():
                                     on_click=lambda fid=f.id, sid=slot.slot_id: book_for_customer(fid, sid),
                                 )
 
-    ui.button("Tìm sân", on_click=refresh_fields).classes("mx-4")
+    date_input.on_value_change(lambda e: refresh_fields())
+    ui.button("Làm mới", on_click=refresh_fields).classes("mx-4")
     refresh_fields()
 
 
@@ -115,22 +132,60 @@ def staff_today_page():
     if not user:
         return
 
-    header(user, [("Đặt hộ khách", "/staff"), ("Đặt sân hôm nay", "/staff/today")])
-    ui.label("Danh sách đặt sân - check-in & xác nhận thanh toán").classes("text-2xl font-bold mt-4 mx-4")
+    facility_id = _staff_facility_id(user)
+    header(user, NAV_LINKS)
+    ui.label("Danh sách đặt sân - vận hành hằng ngày").classes("text-2xl font-bold mt-4 mx-4")
     ui.label(
-        "Nhân viên xác nhận thanh toán tiền mặt (chuyển PENDING -> CONFIRMED) "
-        "và check-in sau khi khách chơi xong (chuyển CONFIRMED -> COMPLETED)."
+        "Đối chiếu minh chứng chuyển khoản (UC18), xác nhận thu tiền mặt, check-in (UC19) "
+        "và xử lý đổi/hủy tại chỗ (UC21)."
     ).classes("mx-4 text-sm text-gray-500")
+
+    if not facility_id:
+        ui.label(
+            "Tài khoản của bạn chưa được gán vào cơ sở sân nào. Vui lòng liên hệ Chủ sân."
+        ).classes("mx-4 text-red-600")
+        return
+
+    with ui.row().classes("mx-4 gap-4"):
+        date_input = ui.date(value=date.today().isoformat()).classes("w-48")
 
     container = ui.column().classes("mx-4 mt-4 w-full gap-2")
 
     def confirm_cash(booking_id: int):
         try:
-            booking_service.confirm_cash_payment(booking_id)
+            booking_service.confirm_cash_payment(booking_id, user.user_id)
             ui.notify("Đã xác nhận thanh toán tiền mặt.", type="positive")
             refresh()
         except BookingError as e:
             ui.notify(str(e), type="negative")
+
+    def confirm_online(booking_id: int):
+        try:
+            booking_service.confirm_payment(booking_id, user.user_id)
+            ui.notify("Đã xác nhận giao dịch chuyển khoản.", type="positive")
+            refresh()
+        except BookingError as e:
+            ui.notify(str(e), type="negative")
+
+    def reject_dialog(booking_id: int):
+        with ui.dialog() as dialog, ui.card().classes("w-96"):
+            ui.label("Từ chối minh chứng thanh toán").classes("text-lg font-bold")
+            reason = ui.input("Lý do từ chối").classes("w-full")
+            error_label = ui.label("").classes("text-red-500")
+
+            def submit():
+                try:
+                    booking_service.reject_payment(booking_id, user.user_id, reason.value)
+                    ui.notify("Đã từ chối, khách cần bổ sung minh chứng khác.", type="warning")
+                    dialog.close()
+                    refresh()
+                except BookingError as e:
+                    error_label.text = str(e)
+
+            with ui.row():
+                ui.button("Từ chối", on_click=submit).props("color=negative")
+                ui.button("Đóng", on_click=dialog.close)
+        dialog.open()
 
     def check_in(booking_id: int):
         try:
@@ -140,41 +195,86 @@ def staff_today_page():
         except BookingError as e:
             ui.notify(str(e), type="negative")
 
+    def cancel_onsite(booking_id: int):
+        try:
+            result = booking_service.cancel_booking(booking_id, reason="Nhân viên xử lý hủy tại chỗ")
+            ui.notify(f"Đã hủy đặt sân. Hoàn cọc: {result.refund_amount:,.0f} đ", type="warning")
+            refresh()
+        except BookingError as e:
+            ui.notify(str(e), type="negative")
+
+    def reschedule_dialog(booking_id: int, field_id: int):
+        with ui.dialog() as dialog, ui.card().classes("w-96"):
+            ui.label("Đổi lịch tại chỗ cho khách").classes("text-lg font-bold")
+            new_date = ui.date(value=date.today().isoformat()).props("minimal")
+            slots_col = ui.column().classes("gap-1 mt-2")
+            error_label = ui.label("").classes("text-red-500")
+
+            def refresh_slots():
+                slots_col.clear()
+                on_date = date.fromisoformat(new_date.value)
+                availability = field_service.get_availability(field_id, on_date)
+                with slots_col:
+                    for slot in availability:
+                        if slot.is_booked:
+                            continue
+                        label = f"{slot.start_time.strftime('%H:%M')} - {slot.end_time.strftime('%H:%M')} ({slot.price:,.0f} đ)"
+
+                        def do_reschedule(sid=slot.slot_id):
+                            try:
+                                booking_service.reschedule_booking(
+                                    booking_id, field_id, sid, date.fromisoformat(new_date.value)
+                                )
+                                ui.notify("Đã đổi lịch cho khách.", type="positive")
+                                dialog.close()
+                                refresh()
+                            except BookingError as e:
+                                error_label.text = str(e)
+
+                        ui.button(label, on_click=do_reschedule).classes("w-full")
+
+            new_date.on_value_change(lambda e: refresh_slots())
+            refresh_slots()
+            ui.button("Đóng", on_click=dialog.close).classes("mt-2")
+        dialog.open()
+
     def refresh():
         container.clear()
-        today = date.today()
-        relevant = [
-            b
-            for b in _list_all_bookings_today(today)
-            if b.status in (BookingStatus.PENDING, BookingStatus.CONFIRMED)
-        ]
+        on_date = date.fromisoformat(date_input.value)
+        bookings = booking_service.list_facility_bookings(facility_id, on_date)
         with container:
-            if not relevant:
-                ui.label("Không có đặt sân nào cần xử lý hôm nay.")
-            for b in relevant:
+            if not bookings:
+                ui.label("Không có đặt sân nào cần xử lý trong ngày này.")
+            for b in bookings:
                 with ui.card().classes("w-full"):
                     with ui.row().classes("justify-between items-center w-full"):
-                        ui.label(f"#{b.id} - Sân #{b.field_id} - Ngày {b.booking_date}")
+                        with ui.column():
+                            ui.label(f"#{b.id} - Sân #{b.field_id} - Ngày {b.booking_date}")
+                            if b.status == BookingStatus.AWAITING_CONFIRMATION and b.payment_proof_ref:
+                                ui.label(f"Minh chứng: {b.payment_proof_ref}").classes("text-sm text-purple-600")
                         ui.badge(STATUS_LABELS[b.status.value]).props(f"color={STATUS_COLORS[b.status.value]}")
-                        with ui.row():
+                        with ui.row().classes("gap-1"):
                             if b.status == BookingStatus.PENDING:
-                                ui.button("Xác nhận đã thu tiền mặt", on_click=lambda bid=b.id: confirm_cash(bid))
+                                ui.button("Xác nhận tiền mặt", on_click=lambda bid=b.id: confirm_cash(bid))
+                            elif b.status == BookingStatus.AWAITING_CONFIRMATION:
+                                ui.button("Xác nhận khớp", on_click=lambda bid=b.id: confirm_online(bid))
+                                ui.button("Từ chối", on_click=lambda bid=b.id: reject_dialog(bid)).props(
+                                    "color=negative"
+                                )
                             elif b.status == BookingStatus.CONFIRMED:
                                 ui.button("Check-in / hoàn tất", on_click=lambda bid=b.id: check_in(bid))
+                                ui.button(
+                                    "Đổi lịch",
+                                    on_click=lambda bid=b.id, fid=b.field_id: reschedule_dialog(bid, fid),
+                                ).props("flat")
+                            if b.status in (
+                                BookingStatus.PENDING,
+                                BookingStatus.AWAITING_CONFIRMATION,
+                                BookingStatus.CONFIRMED,
+                            ):
+                                ui.button("Hủy tại chỗ", on_click=lambda bid=b.id: cancel_onsite(bid)).props(
+                                    "flat color=negative"
+                                )
 
+    date_input.on_value_change(lambda e: refresh())
     refresh()
-
-
-def _list_all_bookings_today(on_date: date):
-    """Demo đơn giản: lấy toàn bộ booking trong ngày trên tất cả các sân bằng cách
-    duyệt qua repository trực tiếp (đủ dùng cho quy mô dữ liệu demo của đồ án)."""
-    from sqlalchemy import select
-
-    from app.core.database import get_session
-    from app.models.booking import Booking
-
-    with get_session() as session:
-        stmt = select(Booking).where(Booking.booking_date == on_date)
-        bookings = list(session.execute(stmt).scalars().all())
-        session.expunge_all()
-        return bookings

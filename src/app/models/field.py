@@ -8,20 +8,18 @@ from app.models.enums import SportType
 
 
 class Field(Base):
-    """Một sân thể thao cụ thể do một Chủ sân sở hữu (VD: Sân bóng mini A1)."""
+    """Một sân thể thao cụ thể (VD: Sân bóng mini A1), thuộc về một Cơ sở sân (Facility)."""
 
     __tablename__ = "fields"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("facilities.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     sport_type: Mapped[SportType] = mapped_column(Enum(SportType), nullable=False)
-    area: Mapped[str] = mapped_column(String(100), nullable=False)  # khu vực/quận
-    address: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    owner = relationship("User", back_populates="fields")
+    facility = relationship("Facility", back_populates="fields")
     time_slots = relationship(
         "FieldTimeSlot", back_populates="field", cascade="all, delete-orphan"
     )
@@ -31,7 +29,7 @@ class Field(Base):
 
 class FieldTimeSlot(Base):
     """Khung giờ & giá chuẩn (template) của một sân, ví dụ 06:00-07:00 giá 200.000đ.
-    Chủ sân tạo/sửa/xóa các bản ghi này ở UC006. Khi khách đặt sân (UC003), họ chọn
+    Chủ sân tạo/sửa/xóa các bản ghi này ở UC14/UC15. Khi khách đặt sân (UC08), họ chọn
     một FieldTimeSlot cho một ngày cụ thể -> tạo ra một Booking."""
 
     __tablename__ = "field_time_slots"

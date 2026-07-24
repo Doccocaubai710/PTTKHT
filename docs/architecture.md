@@ -16,30 +16,52 @@
                             │ gọi
 ┌───────────────────────────▼────────────────────────────────┐
 │  Business Logic Layer  —  src/app/services/                  │
-│  (AuthService, FieldService, BookingService, ReviewService)    │
-│  - Toàn bộ nghiệp vụ: validate ràng buộc nghiệp vụ, tính tiền   │
-│    cọc, chính sách hoàn cọc, state machine của Booking,         │
-│    chống trùng lịch (bắt IntegrityError), phát hành JWT         │
-│  - Không phụ thuộc UI — có thể unit test độc lập                │
+│  (AuthService, FacilityService, FieldService, StaffService,     │
+│   BookingService, ReviewService, ComplaintService,               │
+│   AdminService)                                                 │
+│  - Toàn bộ nghiệp vụ: validate ràng buộc nghiệp vụ, tính tiền    │
+│    cọc, chính sách hoàn cọc, state machine của Booking (kể cả    │
+│    bước đối chiếu minh chứng thanh toán), chống trùng lịch       │
+│    (bắt IntegrityError), phát hành JWT, quy trình duyệt Cơ sở    │
+│    sân, quản lý tài khoản nhân viên/toàn hệ thống, khiếu nại      │
+│  - Không phụ thuộc UI — có thể unit test độc lập                 │
 └───────────────────────────┬────────────────────────────────┘
                             │ gọi
 ┌───────────────────────────▼────────────────────────────────┐
 │  Data Access Layer  —  src/app/repositories/                  │
-│  (UserRepository, FieldRepository, FieldTimeSlotRepository,     │
-│   BookingRepository, ReviewRepository)                         │
+│  (UserRepository, FacilityRepository, FieldRepository,          │
+│   FieldTimeSlotRepository, BookingRepository, ReviewRepository,  │
+│   ComplaintRepository, PasswordResetRepository)                  │
 │  - CRUD thuần túy qua SQLAlchemy Session, không chứa business   │
 │    rule                                                         │
 └───────────────────────────┬────────────────────────────────┘
                             │ đọc/ghi
 ┌───────────────────────────▼────────────────────────────────┐
 │  Database  —  SQLite (file data/sportbook.db)                 │
-│  - Bảng: users, fields, field_time_slots, bookings, reviews     │
+│  - Bảng: users, facilities, fields, field_time_slots, bookings,  │
+│    reviews, complaints, password_reset_tokens                    │
 │  - Ràng buộc toàn vẹn: unique(phone), unique(email),            │
 │    unique(booking_id) trên reviews, và đặc biệt: PARTIAL         │
 │    UNIQUE INDEX trên bookings(field_id, booking_date,            │
-│    time_slot_id) WHERE status IN (PENDING, CONFIRMED, COMPLETED) │
+│    time_slot_id) WHERE status IN (PENDING, AWAITING_CONFIRMATION, │
+│    CONFIRMED, COMPLETED)                                          │
 └──────────────────────────────────────────────────────────┘
 ```
+
+### 1.1. Các entity mới so với bản baseline ban đầu
+
+| Entity | Vai trò | Gói chức năng |
+|---|---|---|
+| `Facility` (Cơ sở sân) | Tách khỏi `Field`: địa điểm kinh doanh do Chủ sân đăng ký, có `status` (PENDING/APPROVED/REJECTED) và quy trình duyệt riêng | G3, G6 |
+| `Complaint` (Khiếu nại) | Người chơi gửi khiếu nại gắn với một Booking/Facility; Quản trị viên xử lý | G6 |
+| `PasswordResetToken` | Mã đặt lại mật khẩu 6 số, có hạn 15 phút, dùng cho UC03 | G1 |
+
+`UserRole` có thêm giá trị `ADMIN` (Quản trị viên hệ thống); `User` có thêm
+`is_active` (khóa/mở tài khoản, UC25) và `facility_id` (chỉ dùng cho STAFF, gán
+Nhân viên vào đúng một Cơ sở sân, UC16). `BookingStatus` có thêm
+`AWAITING_CONFIRMATION` (giữa `PENDING` và `CONFIRMED`, xem
+`docs/diagram-drafts/state-machine-booking.md`). `Review` có thêm `owner_reply`/
+`replied_at` (UC23).
 
 `src/app/models/` (entity SQLAlchemy) và `src/app/core/` (config, kết nối DB, bảo
 mật) là hai thành phần dùng chung, được cả 3 lớp trên tham chiếu tới (xem
@@ -53,11 +75,12 @@ Uvicorn), mô hình triển khai đơn giản hơn một SPA + REST API truyền
 ```
 ┌───────────────┐   HTTP (tải trang lần đầu)   ┌─────────────────────────────┐
 │   Trình duyệt  │ ───────────────────────────>│  Uvicorn (ASGI server)        │
-│   (Khách hàng, │                              │   └─ FastAPI/Starlette app     │
+│   (Người chơi, │                              │   └─ FastAPI/Starlette app     │
 │   Chủ sân,     │ <────────────────────────────│      └─ NiceGUI runtime         │
-│   Nhân viên)   │   WebSocket (mọi sự kiện UI:  │         └─ app/pages/*.py       │
-│                │   click, nhập liệu, cập nhật  │            (Presentation)       │
-└───────────────┘   DOM diff...)                │         └─ app/services/*.py    │
+│   Nhân viên,   │   WebSocket (mọi sự kiện UI:  │         └─ app/pages/*.py       │
+│   Quản trị     │   click, nhập liệu, cập nhật  │            (auth/customer/owner/ │
+│   viên)        │   DOM diff...)                │            staff/admin_pages.py) │
+└───────────────┘                                │         └─ app/services/*.py    │
                                                   │            (Business Logic)     │
                                                   │         └─ app/repositories/    │
                                                   │            (Data Access)        │
